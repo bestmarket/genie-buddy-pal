@@ -57,6 +57,7 @@ type VideoRow = {
   progress: number;
   error: string | null;
   scenes: unknown;
+  settings?: unknown;
   video_path: string | null;
   scheduled_at: string | null;
 };
@@ -73,6 +74,8 @@ function StudioPage() {
   const [prompts, setPrompts] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [localProgress, setLocalProgress] = useState<Record<string, number>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [rerenderId, setRerenderId] = useState<string | null>(null);
 
   const scripts = workspace.data?.scripts ?? [];
   const videos = (workspace.data?.videos ?? []) as unknown as VideoRow[];

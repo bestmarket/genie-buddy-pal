@@ -14,6 +14,71 @@ export type Database = {
   }
   public: {
     Tables: {
+      channels: {
+        Row: {
+          active: boolean
+          auto_post: boolean
+          created_at: string
+          handle: string
+          id: string
+          platform: string
+          project_id: string | null
+          updated_at: string
+          user_id: string
+          webhook_url: string | null
+        }
+        Insert: {
+          active?: boolean
+          auto_post?: boolean
+          created_at?: string
+          handle?: string
+          id?: string
+          platform?: string
+          project_id?: string | null
+          updated_at?: string
+          user_id: string
+          webhook_url?: string | null
+        }
+        Update: {
+          active?: boolean
+          auto_post?: boolean
+          created_at?: string
+          handle?: string
+          id?: string
+          platform?: string
+          project_id?: string | null
+          updated_at?: string
+          user_id?: string
+          webhook_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channels_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cron_config: {
+        Row: {
+          created_at: string
+          name: string
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          name: string
+          token: string
+        }
+        Update: {
+          created_at?: string
+          name?: string
+          token?: string
+        }
+        Relationships: []
+      }
       ideas: {
         Row: {
           angle: string | null
@@ -51,6 +116,60 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      posts: {
+        Row: {
+          channel_id: string
+          created_at: string
+          error: string | null
+          external_url: string | null
+          id: string
+          posted_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+          video_id: string
+        }
+        Insert: {
+          channel_id: string
+          created_at?: string
+          error?: string | null
+          external_url?: string | null
+          id?: string
+          posted_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+          video_id: string
+        }
+        Update: {
+          channel_id?: string
+          created_at?: string
+          error?: string | null
+          external_url?: string | null
+          id?: string
+          posted_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "posts_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "posts_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
             referencedColumns: ["id"]
           },
         ]

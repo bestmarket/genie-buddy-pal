@@ -503,6 +503,16 @@ function StudioPage() {
                         </>
                       )}
                     </Button>
+                    {scenes.length > 0 ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => setEditingId(video.id)}
+                      >
+                        <Pencil className="mr-2 h-4 w-4" /> Edit
+                      </Button>
+                    ) : null}
                     {video.video_path ? (
                       <Button size="sm" variant="outline" onClick={() => download(video)}>
                         <Download className="mr-2 h-4 w-4" /> Download
@@ -515,6 +525,13 @@ function StudioPage() {
           </ul>
         )}
       </section>
+
+      <VideoEditor
+        video={editing}
+        onClose={() => setEditingId(null)}
+        onChanged={refresh}
+        onRerender={(id) => setRerenderId(id)}
+      />
     </div>
   );
 }

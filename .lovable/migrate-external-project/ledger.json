@@ -1,0 +1,18 @@
+{
+  "source": "github",
+  "repo": "https://github.com/bestmarket/genie-buddy-ai-friend.git",
+  "app": "Genie Buddy AI / Channel Studio",
+  "capabilities": [
+    { "capability": "application code (TanStack Start routes, components, server functions)", "source": "repo src/", "outcome": "preserved", "status": "verified", "next_action": null },
+    { "capability": "database schema (profiles, projects, sources, ideas, scripts, videos, channels, posts, cron_config)", "source": "repo supabase/migrations", "outcome": "preserved", "status": "verified", "next_action": null },
+    { "capability": "row-level security and storage policies", "source": "repo migrations", "outcome": "preserved", "status": "verified", "next_action": null },
+    { "capability": "media storage bucket (private, 500MB limit)", "source": "inferred from storage policies and studio.functions.ts", "outcome": "recreated", "status": "verified", "next_action": null },
+    { "capability": "email/password authentication", "source": "repo auth.tsx", "outcome": "preserved", "status": "verified", "next_action": null },
+    { "capability": "Google sign-in", "source": "repo auth.tsx", "outcome": "preserved", "status": "implemented", "next_action": "test with a real Google account after publish" },
+    { "capability": "AI assistant, ideas, scripts (Lovable AI Gateway, openai/gpt-6-astra)", "source": "repo ai.server.ts / studio.functions.ts", "outcome": "preserved", "status": "implemented", "next_action": "exercise once a source/channel is added by a signed-in user" },
+    { "capability": "scheduled video webhook POST /api/public/hooks/scheduled-videos", "source": "repo routes/api", "outcome": "preserved", "status": "verified (rejects bad tokens with 401)", "next_action": "set up an external cron schedule with the token once published" },
+    { "capability": "scheduler secret token", "source": "cron_config table", "outcome": "recreated", "status": "verified", "next_action": null },
+    { "capability": "existing user records and uploaded files", "source": "none provided in repo", "outcome": "pending", "status": "awaiting user export", "next_action": "import CSV/JSON exports when supplied" },
+    { "capability": "channel webhooks for auto-posting (webhook_url per channel)", "source": "repo channels table", "outcome": "preserved in schema", "status": "implemented", "next_action": "users configure their own webhook URLs" }
+  ]
+}

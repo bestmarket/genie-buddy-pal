@@ -79,7 +79,7 @@ export function VideoEditor({ video, onClose, onChanged, onRerender }: Props) {
         const signed = await runSign({ data: { paths: imagePaths } });
         if (cancelled) return;
         const map: Record<string, string> = {};
-        for (const row of signed) map[row.path] = row.url;
+        for (const row of signed) if (row.url) map[row.path] = row.url;
         setPreviews((p) => ({ ...p, ...map }));
       } catch {
         /* previews are optional */
@@ -104,9 +104,13 @@ export function VideoEditor({ video, onClose, onChanged, onRerender }: Props) {
 
   const askEdit = useMutation({
     mutationFn: useServerFn(editVideoByPrompt),
-    onSuccess: async (result) => {
-      setIngredients(normalizeIngredients((result.video as { settings?: unknown }).settings));
-      setScenes(((result.video.scenes as unknown as Scene[]) ?? []).map((s) => ({ ...s })));
+    onSuccess: async (raw) => {
+      const result = raw as {
+        video: { settings?: unknown; scenes?: unknown };
+        summary: string;
+      };
+      setIngredients(normalizeIngredients(result.video.settings));
+      setScenes(((result.video.scenes as Scene[]) ?? []).map((s) => ({ ...s })));
       setPrompt("");
       await onChanged();
       toast.success(result.summary);

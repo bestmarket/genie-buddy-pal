@@ -131,7 +131,11 @@ function StudioPage() {
         }
 
         // 2. Read the freshly built scenes back and sign the media.
-        const fresh = await supabase.from("videos").select("scenes").eq("id", video.id).single();
+        const fresh = await supabase
+          .from("videos")
+          .select("scenes,settings")
+          .eq("id", video.id)
+          .single();
         if (fresh.error) throw new Error(fresh.error.message);
         const built = ((fresh.data.scenes as unknown as Scene[]) ?? []).filter((s) => s.imagePath);
         const paths = built.flatMap((s) =>
@@ -141,12 +145,21 @@ function StudioPage() {
         const urlFor = (path: string | null | undefined) =>
           path ? (signed.find((s) => s.path === path)?.url ?? null) : null;
 
-        // 3. Assemble the film in the browser.
+        // 3. Assemble the film in the browser with its production ingredients.
         await runSetStatus({ data: { videoId: video.id, status: "rendering", progress: 60 } });
+        const ingredients = normalizeIngredients(
+          (fresh.data as { settings?: unknown }).settings ?? video.settings,
+        );
         const blob = await renderVideo(
-          built.map((s) => ({ imageUrl: urlFor(s.imagePath)!, audioUrl: urlFor(s.audioPath) })),
+          built.map((s) => ({
+            imageUrl: urlFor(s.imagePath)!,
+            audioUrl: urlFor(s.audioPath),
+            caption: s.narration,
+          })),
+          ingredients,
           (f) => setLocalProgress((p) => ({ ...p, [video.id]: 0.6 + f * 0.35 })),
         );
+
 
         // 4. Store it and mark the video ready.
         const { data: userData } = await supabase.auth.getUser();

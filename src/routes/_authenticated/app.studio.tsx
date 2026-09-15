@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { CalendarClock, Download, Film, Loader2, Play, Trash2, Wand2 } from "lucide-react";
+import { CalendarClock, Download, Film, Loader2, Pencil, Play, Trash2, Wand2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { VideoEditor } from "@/components/VideoEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,6 +26,7 @@ import {
 } from "@/lib/studio.functions";
 import { useRefreshWorkspace, useWorkspace } from "@/lib/useWorkspace";
 import { cn } from "@/lib/utils";
+import { normalizeIngredients } from "@/lib/videoIngredients";
 
 export const Route = createFileRoute("/_authenticated/app/studio")({
   head: () => ({
@@ -55,6 +57,7 @@ type VideoRow = {
   progress: number;
   error: string | null;
   scenes: unknown;
+  settings?: unknown;
   video_path: string | null;
   scheduled_at: string | null;
 };
@@ -71,6 +74,8 @@ function StudioPage() {
   const [prompts, setPrompts] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [localProgress, setLocalProgress] = useState<Record<string, number>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [rerenderId, setRerenderId] = useState<string | null>(null);
 
   const scripts = workspace.data?.scripts ?? [];
   const videos = (workspace.data?.videos ?? []) as unknown as VideoRow[];
@@ -126,7 +131,11 @@ function StudioPage() {
         }
 
         // 2. Read the freshly built scenes back and sign the media.
-        const fresh = await supabase.from("videos").select("scenes").eq("id", video.id).single();
+        const fresh = await supabase
+          .from("videos")
+          .select("scenes,settings")
+          .eq("id", video.id)
+          .single();
         if (fresh.error) throw new Error(fresh.error.message);
         const built = ((fresh.data.scenes as unknown as Scene[]) ?? []).filter((s) => s.imagePath);
         const paths = built.flatMap((s) =>
@@ -136,12 +145,21 @@ function StudioPage() {
         const urlFor = (path: string | null | undefined) =>
           path ? (signed.find((s) => s.path === path)?.url ?? null) : null;
 
-        // 3. Assemble the film in the browser.
+        // 3. Assemble the film in the browser with its production ingredients.
         await runSetStatus({ data: { videoId: video.id, status: "rendering", progress: 60 } });
+        const ingredients = normalizeIngredients(
+          (fresh.data as { settings?: unknown }).settings ?? video.settings,
+        );
         const blob = await renderVideo(
-          built.map((s) => ({ imageUrl: urlFor(s.imagePath)!, audioUrl: urlFor(s.audioPath) })),
+          built.map((s) => ({
+            imageUrl: urlFor(s.imagePath)!,
+            audioUrl: urlFor(s.audioPath),
+            caption: s.narration,
+          })),
+          ingredients,
           (f) => setLocalProgress((p) => ({ ...p, [video.id]: 0.6 + f * 0.35 })),
         );
+
 
         // 4. Store it and mark the video ready.
         const { data: userData } = await supabase.auth.getUser();
@@ -217,6 +235,16 @@ function StudioPage() {
     void produce(next);
   }, [busyId, produce, videos]);
 
+  // Re-render a video straight after it was edited.
+  useEffect(() => {
+    if (!rerenderId || busyId) return;
+    const target = videos.find((v) => v.id === rerenderId);
+    if (!target) return;
+    setRerenderId(null);
+    void produce(target);
+  }, [busyId, produce, rerenderId, videos]);
+
+  const editing = videos.find((v) => v.id === editingId) ?? null;
 
 
   if (workspace.isLoading) {
@@ -475,6 +503,16 @@ function StudioPage() {
                         </>
                       )}
                     </Button>
+                    {scenes.length > 0 ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => setEditingId(video.id)}
+                      >
+                        <Pencil className="mr-2 h-4 w-4" /> Edit
+                      </Button>
+                    ) : null}
                     {video.video_path ? (
                       <Button size="sm" variant="outline" onClick={() => download(video)}>
                         <Download className="mr-2 h-4 w-4" /> Download
@@ -487,6 +525,13 @@ function StudioPage() {
           </ul>
         )}
       </section>
+
+      <VideoEditor
+        video={editing}
+        onClose={() => setEditingId(null)}
+        onChanged={refresh}
+        onRerender={(id) => setRerenderId(id)}
+      />
     </div>
   );
 }

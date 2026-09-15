@@ -325,6 +325,7 @@ export type Database = {
           scenes: Json
           scheduled_at: string | null
           script_id: string
+          settings: Json
           status: string
           style: string
           title: string
@@ -342,6 +343,7 @@ export type Database = {
           scenes?: Json
           scheduled_at?: string | null
           script_id: string
+          settings?: Json
           status?: string
           style?: string
           title?: string
@@ -359,6 +361,7 @@ export type Database = {
           scenes?: Json
           scheduled_at?: string | null
           script_id?: string
+          settings?: Json
           status?: string
           style?: string
           title?: string

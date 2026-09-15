@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { CalendarClock, Download, Film, Loader2, Play, Trash2, Wand2 } from "lucide-react";
+import { CalendarClock, Download, Film, Loader2, Pencil, Play, Trash2, Wand2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { VideoEditor } from "@/components/VideoEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,6 +26,7 @@ import {
 } from "@/lib/studio.functions";
 import { useRefreshWorkspace, useWorkspace } from "@/lib/useWorkspace";
 import { cn } from "@/lib/utils";
+import { normalizeIngredients } from "@/lib/videoIngredients";
 
 export const Route = createFileRoute("/_authenticated/app/studio")({
   head: () => ({

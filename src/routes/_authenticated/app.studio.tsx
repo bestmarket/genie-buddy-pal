@@ -235,6 +235,16 @@ function StudioPage() {
     void produce(next);
   }, [busyId, produce, videos]);
 
+  // Re-render a video straight after it was edited.
+  useEffect(() => {
+    if (!rerenderId || busyId) return;
+    const target = videos.find((v) => v.id === rerenderId);
+    if (!target) return;
+    setRerenderId(null);
+    void produce(target);
+  }, [busyId, produce, rerenderId, videos]);
+
+  const editing = videos.find((v) => v.id === editingId) ?? null;
 
 
   if (workspace.isLoading) {

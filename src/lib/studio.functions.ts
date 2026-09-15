@@ -650,3 +650,164 @@ export const studioChat = createServerFn({ method: "POST" })
 
     return { reply };
   });
+
+/* ------------------------------------------------------------------ *
+ * Editing a finished video
+ * ------------------------------------------------------------------ */
+
+/** Saves the production ingredients (captions, music, transitions, …). */
+export const updateVideoSettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ videoId: z.string().uuid(), settings: z.record(z.string(), z.unknown()) }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { normalizeIngredients } = await import("./videoIngredients");
+    const res = await context.supabase
+      .from("videos")
+      .update({ settings: normalizeIngredients(data.settings) as never })
+      .eq("id", data.videoId)
+      .select("*")
+      .single();
+    if (res.error) throw new Error(res.error.message);
+    return res.data;
+  });
+
+/** Rewrites scene text and/or the production ingredients from a plain prompt. */
+export const editVideoByPrompt = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ videoId: z.string().uuid(), prompt: z.string().min(2).max(2000) }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { askAIJson } = await import("./ai.server");
+    const { normalizeIngredients } = await import("./videoIngredients");
+    const { supabase } = context;
+
+    const video = await supabase.from("videos").select("*").eq("id", data.videoId).single();
+    if (video.error) throw new Error(video.error.message);
+
+    const scenes = ((video.data.scenes as unknown as Scene[]) ?? []).map((s) => ({ ...s }));
+    const current = normalizeIngredients((video.data as { settings?: unknown }).settings);
+
+    const result = await askAIJson<{
+      settings?: Record<string, unknown>;
+      title?: string;
+      sceneEdits?: Array<{ index: number; visual?: string; narration?: string }>;
+      summary?: string;
+    }>(
+      "You are a video editor. You translate a plain-language edit request into concrete changes to a video's production settings and its scenes. Only change what the request asks for.",
+      `Current title: ${video.data.title}\nLanguage: ${video.data.language}\n\nCurrent production settings (JSON):\n${JSON.stringify(current)}\n\nScenes:\n${scenes
+        .map((s, i) => `${i}. visual: ${s.visual}\n   narration: ${s.narration}`)
+        .join("\n")}\n\nEdit request: ${data.prompt}\n\nReturn JSON:\n{\n  "settings": an object with ONLY the settings keys that must change, same shape as the current settings,\n  "title": new title (only if asked),\n  "sceneEdits": [{ "index": number, "visual": new image prompt (only if the picture must change), "narration": new spoken line (only if the words must change) }],\n  "summary": one short sentence describing what you changed\n}\nUse an empty array or omit keys when nothing changes there. Valid values — transition.type: cut|crossfade|slide|zoom; motion.type: none|zoom-in|zoom-out|pan-left|pan-right; music.mood: calm|uplifting|tense|epic; grade: none|warm|cool|mono|vivid|vhs; captions.size: sm|md|lg; captions.position: bottom|center.`,
+    );
+
+    const merged = normalizeIngredients({ ...current, ...(result.settings ?? {}) });
+    const deepMerged = normalizeIngredients({
+      ...merged,
+      captions: { ...current.captions, ...((result.settings?.["captions"] as object) ?? {}) },
+      transition: { ...current.transition, ...((result.settings?.["transition"] as object) ?? {}) },
+      motion: { ...current.motion, ...((result.settings?.["motion"] as object) ?? {}) },
+      music: { ...current.music, ...((result.settings?.["music"] as object) ?? {}) },
+      sfx: { ...current.sfx, ...((result.settings?.["sfx"] as object) ?? {}) },
+      titleCard: { ...current.titleCard, ...((result.settings?.["titleCard"] as object) ?? {}) },
+      pacing: { ...current.pacing, ...((result.settings?.["pacing"] as object) ?? {}) },
+    });
+
+    let touched = 0;
+    for (const edit of result.sceneEdits ?? []) {
+      const scene = scenes[edit.index];
+      if (!scene) continue;
+      if (edit.visual && edit.visual !== scene.visual) {
+        scene.visual = String(edit.visual).slice(0, 1200);
+        scene.imagePath = null; // regenerate the picture on the next production run
+        touched += 1;
+      }
+      if (edit.narration && edit.narration !== scene.narration) {
+        scene.narration = String(edit.narration).slice(0, 2000);
+        scene.audioPath = null; // regenerate the voice on the next production run
+        touched += 1;
+      }
+    }
+
+    const update: Record<string, unknown> = { settings: deepMerged, scenes };
+    if (result.title) update["title"] = String(result.title).slice(0, 200);
+
+    const saved = await supabase
+      .from("videos")
+      .update(update as never)
+      .eq("id", data.videoId)
+      .select("*")
+      .single();
+    if (saved.error) throw new Error(saved.error.message);
+
+    return {
+      video: saved.data,
+      summary: result.summary ?? "Applied your changes.",
+      scenesTouched: touched,
+    };
+  });
+
+/** Regenerates one scene's picture and/or voice, optionally from a new prompt. */
+export const regenerateScene = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        videoId: z.string().uuid(),
+        index: z.number().int().min(0).max(30),
+        visual: z.string().max(1200).optional(),
+        narration: z.string().max(2000).optional(),
+        image: z.boolean().default(true),
+        audio: z.boolean().default(false),
+        voice: z.enum(["warm", "bright", "deep", "calm"]).default("warm"),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { generateSceneImage, generateNarration } = await import("./ai.server");
+    const { supabase, userId } = context;
+
+    const video = await supabase.from("videos").select("*").eq("id", data.videoId).single();
+    if (video.error) throw new Error(video.error.message);
+
+    const scenes = ((video.data.scenes as unknown as Scene[]) ?? []).map((s) => ({ ...s }));
+    const scene = scenes[data.index];
+    if (!scene) throw new Error("That scene doesn't exist.");
+
+    if (data.visual !== undefined && data.visual.trim()) scene.visual = data.visual.trim();
+    if (data.narration !== undefined && data.narration.trim()) scene.narration = data.narration.trim();
+
+    const stamp = Date.now();
+    const base = `${userId}/${data.videoId}/scene-${data.index}-${stamp}`;
+
+    if (data.image) {
+      const bytes = await generateSceneImage(
+        `${scene.visual}. ${styleLook(video.data.style)}. Single still frame, 16:9, highly detailed, no text, no watermark, no captions.`,
+      );
+      const up = await supabase.storage
+        .from("media")
+        .upload(`${base}.png`, bytes, { contentType: "image/png", upsert: true });
+      if (up.error) throw new Error(up.error.message);
+      scene.imagePath = `${base}.png`;
+    }
+
+    if (data.audio) {
+      const bytes = await generateNarration(scene.narration, VOICES[data.voice] ?? "Kore");
+      const up = await supabase.storage
+        .from("media")
+        .upload(`${base}.wav`, bytes, { contentType: "audio/wav", upsert: true });
+      if (up.error) throw new Error(up.error.message);
+      scene.audioPath = `${base}.wav`;
+    }
+
+    scenes[data.index] = scene;
+    const res = await supabase
+      .from("videos")
+      .update({ scenes: scenes as never, error: null })
+      .eq("id", data.videoId)
+      .select("*")
+      .single();
+    if (res.error) throw new Error(res.error.message);
+    return res.data;
+  });
